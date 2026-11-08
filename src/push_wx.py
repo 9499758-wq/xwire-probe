@@ -40,7 +40,9 @@ GH_RE = r'- (?:(?:\*\*)?([\w./\-]+)(?:\*\*)?)\s*(★\d+)?\s*—\s*(.+?)(?:\s*·\
 MAX_CHARS = 1700        # 微信单条上限 1800，留余量
 BODY_CHARS = 700        # 正文不截断：内容本身才是要看的东西，只有极长推文才收尾
 SEND_GAP = 4.0          # 两条之间的间隔。iLink 主动推送配额很小，1.2s 会撞墙
-MAX_PER_RUN = 4         # 每轮最多主动发几条，其余留队列等下一轮
+MAX_PER_RUN = 3         # 每轮最多主动发几条，其余留队列等下一轮
+# iLink 一张 context_token 实测只放 10 条（4+4+2 之后第 11 条起 ret:-2 prepare failed），
+# 一天三轮 × 3 条 = 9 条，刚好在配额内，还留一条余量
 
 # 报告里这三类人不需要逐条搬：媒体号条数多、单条信息量低
 # iLink 主动消息有配额（实测一轮十几条后返回 ret:-2 prepare failed），
@@ -360,7 +362,10 @@ def main():
     title, meta, secs = parse_report(path)
 
     msgs = []
-    head = f"【X 快讯 · 11-08】"
+    # 标题日期从报告文件名取，别硬编码——跨天后会一直显示旧日期
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", os.path.basename(path))
+    day = m.group(1)[5:] if m else time.strftime("%m-%d")
+    head = f"【X 快讯 · {day}】"
     if meta:
         # 只留窗口和条数，生成时间这类元信息没人看
         keep = [x for x in meta.split("·") if "生成" not in x]
