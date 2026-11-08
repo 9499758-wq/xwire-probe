@@ -52,7 +52,11 @@ jobs:
         run: |
           git config user.name xwire-bot
           git config user.email bot@xwire.local
-          git add src/out src/raw src/seen.json src/userid-cache.json src/trans-cache*.json src/gql-config.json 2>/dev/null || true
-          rm -f src/cookie.txt src/cookie-meta.json src/secrets.json
+          # 先删凭证再 add：否则 add 会把它们也stage进来。
+          # 另外 add 不能带通配符，任一路径不存在会让整条命令失败、
+          # 一条都没加进去（上一轮就是这样，报告没能回到仓库）。
+          rm -f src/cookie.txt src/cookie-meta.json src/secrets.json src/recipient.txt
+          rm -rf src/__pycache__
+          git add -A
           git commit -m "xwire $(TZ=Asia/Shanghai date +%F-%H%M)" || echo "无变化"
           git push
