@@ -698,10 +698,11 @@ def main():
     if deal_list:
         L += [f"### 🎫 免费额度 / 限免清单（{len(deal_list)} 条）", "",
               "| 提供方 | 内容 | 限额 | 到期 | 源 |", "|---|---|---|---|---|"]
-        rows = [(("deal:" + (e.get("id") or e.get("source_url") or str(i)),
-                  (e.get("title") or "").replace("|", "/"))
-                 + " —— " + (e.get("summary") or "").replace("|", "/"))
-                for i, e in enumerate(deal_list[:30])]
+        rows = [(
+            "deal:" + str(e.get("id") or e.get("source_url") or i),
+            (e.get("title") or "").replace("|", "/")
+            + " —— " + (e.get("summary") or "").replace("|", "/"),
+        ) for i, e in enumerate(deal_list[:30])]
         deals_zh = zh_batch(rows)
         for e, zh in zip(deal_list[:30], deals_zh):
             # 译文是「标题 —— 摘要」，拆回来各占一格
