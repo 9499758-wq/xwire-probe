@@ -464,6 +464,24 @@ def free_llm_apis():
 
 
 
+def zh_batch(rows):
+    """把 (缓存id, 英文) 列表整批译成中文；失败或未启用时原样返回。
+
+    推文正文在渲染分区的循环里单独译过一轮，这里只服务表格说明、
+    仓库描述这类零散文字——不译的话报告里会一半中文一半英文。
+    """
+    if not rows or not ZH or not _translate:
+        return [t for _, t in rows]
+    ids = [r[0] for r in rows]
+    txt = [r[1] for r in rows]
+    try:
+        got = _translate(txt, ids)
+    except Exception as e:
+        print(f"[!] 批量翻译失败，保留原文：{e}", file=sys.stderr)
+        return txt
+    return [g if g and g.strip() else o for g, o in zip(got, txt)]
+
+
 def clip(text, limit):
     """按词边界截断：宁可短一点，也不要把一个单词切成两半。"""
     text = re.sub(r"\s+", " ", text or "").strip()
@@ -664,23 +682,32 @@ def main():
         total_models = sum(len(x["models"]) for x in free_apis)
         L += [f"### 🎯 永久免费 LLM API（{len(free_apis)} 家 · {total_models} 个模型 · 注册即用）", "",
               "| 提供方 | 免费条件 | 基线地址 | 代表模型 / 限速 |", "|---|---|---|---|"]
-        for a in free_apis:
+        # 免费条件那格全是英文说明，不译的话这张表读不懂
+        blurbs = zh_batch([("api:" + a["provider"], a["blurb"]) for a in free_apis])
+        for a, blurb_zh in zip(free_apis, blurbs):
             pick = a["models"][:2]
             far = "<br>".join(
                 f"`{x['id']}` {x['ctx'] or ''} {('· ' + x['limit']) if x['limit'] else ''}".strip()
                 for x in pick)
             more = f"<br>+{len(a['models']) - len(pick)} 个" if len(a["models"]) > len(pick) else ""
             L.append(f"| **[{a['provider']}]({a['key_url']})** {a['flag']} | "
-                     f"{a['blurb']} | `{a['base'] or '—'}` | {far}{more} |")
+                     f"{blurb_zh} | `{a['base'] or '—'}` | {far}{more} |")
         L += ["", "> 源 `mnfst/awesome-free-llm-apis`：逐家手测的永久免费额度，"
                   "模型名 / 上下文 / 限速都是仓库原始记录", ""]
 
     if deal_list:
         L += [f"### 🎫 免费额度 / 限免清单（{len(deal_list)} 条）", "",
               "| 提供方 | 内容 | 限额 | 到期 | 源 |", "|---|---|---|---|---|"]
-        for e in deal_list[:30]:
-            ttl = (e.get("title") or "").replace("|", "/")[:44]
-            sry = clip((e.get("summary") or "").replace("|", "/"), 90)
+        rows = [(("deal:" + (e.get("id") or e.get("source_url") or str(i)),
+                  (e.get("title") or "").replace("|", "/"))
+                 + " —— " + (e.get("summary") or "").replace("|", "/"))
+                for i, e in enumerate(deal_list[:30])]
+        deals_zh = zh_batch(rows)
+        for e, zh in zip(deal_list[:30], deals_zh):
+            # 译文是「标题 —— 摘要」，拆回来各占一格
+            ttl, _, sry = zh.partition(" —— ")
+            ttl = clip(ttl.strip() or "—", 60)
+            sry = clip(sry.strip(), 130)
             parts = []
             if e.get("rpm") not in (None, "None", ""):
                 parts.append(f"{e['rpm']} RPM")
@@ -704,14 +731,16 @@ def main():
 
     if gh_free:
         L += [f"### 🧲 GitHub 上能直接拿的免费资源（{len(gh_free)} 个）", ""]
-        for g in gh_free:
-            L.append(f"- **{g['name']}** ★{g['star']} — {g['desc']} · {g['url']}")
+        descs = zh_batch([("repo:" + g["name"], g["desc"]) for g in gh_free])
+        for g, d in zip(gh_free, descs):
+            L.append(f"- **{g['name']}** ★{g['star']} — {d} · {g['url']}")
         L += [""]
 
     if gh_new:
         L += [f"### 🐙 GitHub 新冒头 AI 开源项目（近 7 天 · {len(gh_new)} 个）", ""]
-        for g in gh_new:
-            L.append(f"- **{g['name']}** ★{g['star']} — {g['desc']} · {g['url']}")
+        descs = zh_batch([("repo:" + g["name"], g["desc"]) for g in gh_new])
+        for g, d in zip(gh_new, descs):
+            L.append(f"- **{g['name']}** ★{g['star']} — {d} · {g['url']}")
         L += [""]
 
     if auth_dead:
