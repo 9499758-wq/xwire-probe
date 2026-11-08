@@ -210,13 +210,26 @@ def clean_en(body):
     return body
 
 
+def is_zh(text):
+    """粗略判断这段是否已经是中文。
+
+    报告正文现在在 crawl.py 里就译好了，推送到这里若再送一遍翻译，
+    既是白花 API，也可能被模型顺手改写。汉字占比超过一成才当中文看。
+    """
+    if not text:
+        return False
+    han = len(re.findall(r"[\u4e00-\u9fff]", text))
+    letters = len(re.findall(r"[A-Za-z]", text))
+    return han >= 6 and han >= letters * 0.3
+
+
 def localize(items):
-    """把条目里的英文正文换成中文，就地填进 item['zh']。"""
+    """把条目里的英文正文换成中文，就地填进 item['zh']。已是中文的跳过。"""
     texts, ids = [], []
     for it in items:
         if it["kind"] == "tweet" and it["text"]:
             raw = clean_en(" ".join(it["text"]))
-            if raw:
+            if raw and not is_zh(raw):
                 texts.append(raw)
                 ids.append(it.get("url", raw)[-40:])
         elif it["kind"] == "line":
@@ -236,7 +249,9 @@ def localize(items):
     zh = translate(texts, ids)
     j = 0
     for it in items:
-        if it["kind"] == "tweet" and it["text"] and clean_en(" ".join(it["text"])):
+        if (it["kind"] == "tweet" and it["text"]
+                and clean_en(" ".join(it["text"]))
+                and not is_zh(clean_en(" ".join(it["text"])))):
             it["zh"] = zh[j]
             j += 1
         elif it["kind"] == "line":

@@ -14,6 +14,11 @@ from datetime import datetime, timezone, timedelta
 
 from xclient import XClient, AuthExpired, RateLimited
 
+try:
+    from translate import translate as _translate
+except Exception:            # 翻译不可用时退原文，别让整个抓取失败
+    _translate = None
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(BASE, "raw")
 OUT = os.path.join(BASE, "out")
@@ -26,6 +31,8 @@ PROXY = os.environ.get("XWIRE_PROXY", "http://127.0.0.1:7890")
 # 这样定时任务在无代理的机器上照样能产出可读报告，而不是整轮失败。
 NO_X = os.environ.get("XWIRE_NO_X", "") == "1"
 WINDOW_HOURS = int(os.environ.get("XWIRE_WINDOW_HOURS", "36"))
+# 报告正文是否译成中文。默认开：仓库里的报告是给人直接读的，不该是英文。
+ZH = os.environ.get("XWIRE_ZH", "1") != "0"
 # 每抓一个账号后睡多久（秒）；x.com 限流很凶，太小会被封
 SLEEP_MIN = float(os.environ.get("XWIRE_SLEEP_MIN", "6"))
 SLEEP_MAX = float(os.environ.get("XWIRE_SLEEP_MAX", "12"))
@@ -632,8 +639,20 @@ def main():
         L += [f"## {title}（{len(items)} 条）", ""]
         if not items:
             L += ["_本窗口内这些号没发新东西_", ""]
+        # 正文先中文化。原来只在推送那一步译，导致仓库里的报告全是英文，
+        # 直接读 GitHub 的人看到的就是一屏原文。
+        if ZH and _translate and items:
+            try:
+                texts = [re.sub(r'\s+', ' ', t["text"]).strip() for t in items]
+                got = _translate(texts, [t["id"] for t in items])
+                for t, zh in zip(items, got):
+                    if zh and zh.strip():
+                        t["zh"] = zh.strip()
+            except Exception as e:
+                print(f"[!] 翻译失败，正文用原文：{e}", file=sys.stderr)
+
         for t in items:
-            body = re.sub(r'\n{3,}', '\n\n', t["text"].strip()).replace("\n", "\n> ")
+            body = re.sub(r'\n{3,}', '\n\n', (t.get("zh") or t["text"]).strip()).replace("\n", "\n> ")
             L += [f"- **@{t['handle']}**（{t['name']}）· {fmt_ts(t['ts'])}"
                   f" · ♥{fmt_k(t['fav'])} 🔁{fmt_k(t['rt'])}",
                   f"> {body}",
