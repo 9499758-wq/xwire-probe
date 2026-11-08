@@ -609,9 +609,8 @@ def main():
     #   seen 里没有         → 全新，收
     #   seen[id] == 今天     → 今天已收过（重跑），仍收，报告不该变短
     #   seen[id] == 更早日期 → 别的日子报过，跳过，避免重复
-    if auth_dead:
-        print("[x] 登录态失效，本轮不产出报告", file=sys.stderr)
-        sys.exit(5)
+    # cookie 过期时不中止：白嫖区那些公开数据源不依赖登录，
+    # 照常出报告，退出码留给外层判断要不要提醒重新登录。
 
     fresh = [t for t in raw_tweets
              if t["id"] not in seen or seen[t["id"]] == today]
@@ -721,9 +720,24 @@ def main():
     seen = {k: v for k, v in seen.items() if v >= keep_after}
     json.dump(seen, open(SEEN, "w"), ensure_ascii=False)
 
+    # 报告也要清：Actions 每轮都 commit，不清的话仓库一年后会堆 365 份
+    out_cut = (now8 - timedelta(days=30)).strftime("%Y-%m-%d")
+    for fn in os.listdir(OUT):
+        if fn.startswith("xwire-") and fn.endswith(".md"):
+            day = fn[6:16]
+            if day and day < out_cut:
+                try:
+                    os.remove(os.path.join(OUT, fn))
+                except Exception:
+                    pass
+
     print(f"[+] 新 {len(fresh)} 条 | 额度 {len(deal_list)} | 免费模型 {len(or_free)} | "
           f"新项目 {len(gh_new)} | 免费资源 {len(gh_free)} | 免费API {len(free_apis)} → {path}", file=sys.stderr)
     print(path)
+
+    if auth_dead:
+        print("[x] 登录态已失效，本轮只有公开数据源；请重新导出 cookie.txt", file=sys.stderr)
+        sys.exit(5)
 
 
 if __name__ == "__main__":

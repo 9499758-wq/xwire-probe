@@ -49,6 +49,9 @@ jobs:
         run: python3 crawl.py
 
       - name: 提交结果
+        # 抓取步骤失败也照样提交：cookie 过期时 crawl.py exit 5，
+        # 但白嫖区那部分数据是好的，丢掉等于整轮白跑。
+        if: always()
         run: |
           git config user.name xwire-bot
           git config user.email bot@xwire.local
@@ -59,4 +62,5 @@ jobs:
           rm -rf src/__pycache__
           git add -A
           git commit -m "xwire $(TZ=Asia/Shanghai date +%F-%H%M)" || echo "无变化"
-          git push
+          # 并发轮次偶尔撞上 non-fast-forward，重试一次
+          git push || (git pull --rebase --autostash && git push)
