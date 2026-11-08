@@ -695,6 +695,9 @@ def main():
             L.append(f"- **{g['name']}** ★{g['star']} — {g['desc']} · {g['url']}")
         L += [""]
 
+    if auth_dead:
+        L += ["<sub>⚠️ 登录态已失效，本轮只抓了公开数据源</sub>", ""]
+
     if empty or throttled:
         bits = []
         if empty:
