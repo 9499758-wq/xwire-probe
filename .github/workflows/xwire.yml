@@ -1,0 +1,58 @@
+name: xwire
+
+on:
+  schedule:
+    # 北京时间 14:00 / 18:00 / 00:00
+    - cron: '0 6 * * *'
+    - cron: '0 10 * * *'
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: xwire
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 写入凭证
+        env:
+          COOKIE: ${{ secrets.XWIRE_COOKIE }}
+          META: ${{ secrets.XWIRE_META }}
+          KEY: ${{ secrets.BAOYUE_API_KEY }}
+        run: |
+          printf '%s' "$COOKIE" > src/cookie.txt
+          printf '%s' "$META" > src/cookie-meta.json
+          python3 -c "import json,os,sys; json.dump({'BAOYUE_API_KEY': os.environ['KEY']}, open('src/secrets.json','w'))"
+          # gql-config.json 已在仓库里，不需要 secret
+          ls -l src/
+
+      - name: 抓取
+        working-directory: src
+        env:
+          XWIRE_WINDOW_HOURS: '36'
+          XWIRE_SLEEP_MIN: '2'
+          XWIRE_SLEEP_MAX: '5'
+          XWIRE_CACHE_HOURS: '60'
+          XWIRE_PROXY: ''
+        run: python3 crawl.py
+
+      - name: 提交结果
+        run: |
+          git config user.name xwire-bot
+          git config user.email bot@xwire.local
+          git add src/out src/raw src/seen.json src/userid-cache.json src/trans-cache*.json src/gql-config.json 2>/dev/null || true
+          rm -f src/cookie.txt src/cookie-meta.json src/secrets.json
+          git commit -m "xwire $(TZ=Asia/Shanghai date +%F-%H%M)" || echo "无变化"
+          git push
